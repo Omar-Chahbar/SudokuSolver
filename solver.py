@@ -1,22 +1,21 @@
-from ValidationChecker import ValidationChecker
 from ValidationChecker import getBoxTopLeft
+import copy
 
 class Solver:
-    boardArray: [[]]
 
-    def __init__(self, boardArray):
+    def __init__(self, boardArray, validationChecker):
         self.boardArray = boardArray
+        self.validationChecker = validationChecker
 
     def solvePuzzle(self):
-        validationChecker = ValidationChecker()
-        valid = validationChecker.checkInitialValidity(self.boardArray)
+        valid = self.validationChecker.checkInitialValidity(self.boardArray)
         if not valid:
             print("Invalid board!")
             return
         candidateTable = self.buildCandidateTable()
-        self.solveTrivialCells(self.boardArray,candidateTable)
+        self.solveTrivialCells(candidateTable)
         initialBoard = copy.deepcopy(self.boardArray)
-        self.solvePuzzleRecursively(0,0, "forward", initialBoard,candidateTable)
+        return self.solvePuzzleRecursively(0,0, "forward", initialBoard,candidateTable)
 
     def solvePuzzleRecursively(self, row, column, direction, initialBoard,candidateTable):
         if column > 8:
@@ -38,15 +37,15 @@ class Solver:
             else:
                 return self.solvePuzzleRecursively(row,column - 1, direction, initialBoard,candidateTable)
     
-        if board[row][column] == 9: 
-            board[row][column] = 0
+        if self.boardArray[row][column] == 9: 
+            self.boardArray[row][column] = 0
             return self.solvePuzzleRecursively(row,column - 1, "backwards", initialBoard,candidateTable)
 
-        board[row][column]+= 1
-        while not checkValidity(row,column):
-            board[row][column]+= 1
-            if board[row][column] == 10:
-                board[row][column] = 0
+        self.boardArray[row][column]+= 1
+        while not self.validationChecker.checkValidity(self.boardArray,row,column):
+            self.boardArray[row][column]+= 1
+            if self.boardArray[row][column] == 10:
+                self.boardArray[row][column] = 0
                 return self.solvePuzzleRecursively(row,column - 1, "backwards", initialBoard,candidateTable)
 
         return self.solvePuzzleRecursively(row,column + 1, "forward", initialBoard,candidateTable)
@@ -66,7 +65,7 @@ class Solver:
 
         for value in range(1,10):
             self.boardArray[x][y] = value
-            if checkValidity(board,x,y):
+            if self.validationChecker.checkValidity(self.boardArray,x,y):
                 candidateValues.append(value)
         self.boardArray[x][y] = 0
         return candidateValues
@@ -96,19 +95,20 @@ class Solver:
                     candidateTable[x][y].remove(value)
 
     def solveTrivialCells(self, candidateTable):
-        changeMade = False
-        self.solveTrivialSingleCells(self.boardArray, candidateTable, changeMade)
-        self.solveHiddenCells(self.boardArray, candidateTable, changeMade)
+        changeMade = self.solveTrivialSingleCells(candidateTable)
+        changeMade = True if self.solveHiddenCells(candidateTable) else changeMade
 
         if changeMade == True:
-            self.solveTrivialCells(self.boardArray, candidateTable)
+            self.solveTrivialCells(candidateTable)
 
-    def solveHiddenCells(self, candidateTable,changeMade):
-        self.checkHiddenRows(candidateTable,changeMade)
-        self.checkHiddenColumns(candidateTable,changeMade)
-        self.checkHiddenBoxes(candidateTable,changeMade)
+    def solveHiddenCells(self, candidateTable):
+        changeMade = self.checkHiddenRows(candidateTable)
+        changeMade = True if self.checkHiddenColumns(candidateTable) else changeMade
+        changeMade = True if self.checkHiddenBoxes(candidateTable) else changeMade
+        return changeMade
 
-    def checkHiddenRows(self, candidateTable,changeMade):
+    def checkHiddenRows(self, candidateTable):
+        changeMade = False
         for i in range(0,9):
             missingValues = []
             for h in range(1,10):
@@ -123,39 +123,51 @@ class Solver:
                         countOfValue += 1
                         index = k
                 if countOfValue == 1:
-                    self.solveATrivialCell(i, index, candidateTable)
+                    self.solveATrivialCell(i, index, value, candidateTable)
                     changeMade = True
 
-    def checkHiddenColumns(self, candidateTable,changeMade):
+        return changeMade
+
+    def checkHiddenColumns(self, candidateTable):
+        changeMade = False
         for column in range(0,9):
-            self.checkHiddenColumn(candidateTable,changeMade,column)
+            changeMade = True if self.checkHiddenColumn(candidateTable,column) else changeMade
+        return changeMade
         
-    def checkHiddenColumn(self, candidateTable, changeMade, column):
+    def checkHiddenColumn(self, candidateTable, column):
+        changeMade = False
         missingValues = self.findMissingColumnValues(column)
 
         for value in missingValues:        
             index = self.checkIfValueIsInOnlyOneCandidateList(column,value,candidateTable)
             if index != -1:
-                self.solveATrivialCell(i, index, candidateTable)
+                self.solveATrivialCell(index, column, value, candidateTable)
                 changeMade = True
 
-    def checkHiddenBoxes(candidateTable,changeMade):
+        return changeMade
+
+    def checkHiddenBoxes(self,candidateTable):
+        changeMade = False
         for x in range(0,7,3):
             for y in range(0,7,3):
-                self.checkHiddenBox(candidateTable,changeMade,x,y)
+                changeMade = True if self.checkHiddenBox(candidateTable,x,y) else changeMade
+        return changeMade
             
-    def checkHiddenBox(candidateTable,changeMade,row,column):
+    def checkHiddenBox(self,candidateTable,row,column):
+        changeMade = False
+
         missingValues = self.findMissingBoxValues(row, column)
 
         for value in missingValues: 
             index = self.checkIfValueIsInOnlyOneBoxCandidateList(row,column,value,candidateTable)
             if index != -1:
-                self.solveATrivialCell(i, index, candidateTable)
+                self.solveATrivialCell(index[0], index[1], value, candidateTable)
                 changeMade = True
 
+        return changeMade
 
-    def solveATrivialCell(self, row, column, candidateTable):
-        self.boardArray[row][column] = candidateTable[row][column].pop()
+    def solveATrivialCell(self, row, column, value, candidateTable):
+        self.boardArray[row][column] = value
         candidateTable[row][column] = []
         self.updateCandidateTable(row, column, self.boardArray[row][column], candidateTable)
 
@@ -165,7 +177,7 @@ class Solver:
         for row in self.boardArray:
             columnList.append(row[column])
 
-        return self.findMissingValues(boxList)
+        return self.findMissingValues(columnList)
 
     def findMissingBoxValues(self, row, column):
         boxList = []
@@ -177,6 +189,8 @@ class Solver:
         return self.findMissingValues(boxList)
     
     def findMissingValues(self,list):
+        missingValues = []
+
         for i in range(1,10):
             if list.count(i) == 0:
                 missingValues.append(i)
@@ -194,21 +208,24 @@ class Solver:
             return index
         return -1
 
-    def checkIfValueIsInOnlyOneBoxCandidateList(row,column,value,candidateTable):
+    def checkIfValueIsInOnlyOneBoxCandidateList(self,row,column,value,candidateTable):
         countOfValue = 0
-        index = 0
+        index = []
 
         for x in range(row, row + 3):
             for y in range(column, column + 3):
-                if candidateTable[x][y] != 0 and candidateTable[i][column].count(value) == 1:
+                if candidateTable[x][y] != 0 and candidateTable[x][y].count(value) == 1:
                     countOfValue += 1
-                    index = i
+                    index.append(x)
+                    index.append(y)
 
         if countOfValue == 1:
             return index
         return -1
 
-    def solveTrivialSingleCells(self, candidateTable, changeMade):
+    def solveTrivialSingleCells(self, candidateTable):
+        changeMade = False
+
         for x in range(0, 9):
             for y in range(0, 9):
                 if self.boardArray[x][y] == 0 and len(candidateTable[x][y]) == 1:
@@ -216,6 +233,7 @@ class Solver:
                     candidateTable[x][y] = []
                     self.updateCandidateTable(x, y, self.boardArray[x][y], candidateTable)
                     changeMade = True
+        return changeMade
 
     def getNextValueInList(self,list,value):
         index = list.index(value)
